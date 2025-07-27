@@ -1,0 +1,43 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.1;net9.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    
+    <!-- NuGet Package Metadata -->
+    <PackageId>AcmeshWrapper</PackageId>
+    <Version>1.1.0</Version>
+    <Authors>AcmeshWrapper Contributors</Authors>
+    <Description>A modern .NET library providing a type-safe, async wrapper around acme.sh for ACME certificate management. Simplifies obtaining, renewing, and managing SSL/TLS certificates from Let's Encrypt and other ACME-compliant certificate authorities.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/ersintarhan/AcmeshWrapper</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/ersintarhan/AcmeshWrapper.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>acme;acme.sh;ssl;tls;certificate;letsencrypt;https;security;wrapper</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <Copyright>Copyright (c) 2025 AcmeshWrapper Contributors</Copyright>
+  </PropertyGroup>
+
+  <!-- Conditional compilation for implicit usings -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net9.0'">
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ProcessX" Version="1.5.6" />
+  </ItemGroup>
+
+  <!-- Add necessary packages for netstandard2.1 -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
+    <PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.4" />
+    <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
