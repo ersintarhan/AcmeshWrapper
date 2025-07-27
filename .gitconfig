@@ -1,0 +1,6 @@
+[user]
+    signingkey = 4D31F871BF61EB98
+[commit]
+    gpgsign = true
+[gpg]
+    program = /opt/homebrew/bin/gpg
