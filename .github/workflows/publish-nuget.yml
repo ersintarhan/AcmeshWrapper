@@ -118,14 +118,11 @@ jobs:
           --skip-duplicate
 
     - name: Create GitHub Release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ github.ref_name }}
-        release_name: Release ${{ github.ref_name }}
+        name: Release ${{ steps.version.outputs.VERSION }}
         body: |
-          ## Changes in ${{ github.ref_name }}
+          ## Changes in ${{ steps.version.outputs.VERSION }}
           
           ### NuGet Package
           - Package Version: ${{ steps.version.outputs.VERSION }}
@@ -137,6 +134,10 @@ jobs:
           ```
         draft: false
         prerelease: ${{ contains(steps.version.outputs.VERSION, '-') }}
+        files: ./artifacts/*.nupkg
+        fail_on_unmatched_files: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Upload NuGet package as artifact
       uses: actions/upload-artifact@v4
