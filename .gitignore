@@ -420,4 +420,17 @@ FodyWeavers.xsd
 /.claude
 /.idea
 ANALYSIS.md
+
+# Local configuration
+*.local.json
+*.local.config
+acme.sh.env
+
+# Certificates (security)
+*.pem
+*.cer
+*.key
+*.p12
+
+# Keep CLAUDE.md as it provides development guidance
 CLAUDE.md

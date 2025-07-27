@@ -37,9 +37,22 @@ AcmeshWrapper is a modern .NET library that provides a type-safe, async wrapper 
 ```bash
 # Install via NuGet
 dotnet add package AcmeshWrapper
+```
 
-# Or add project reference
-dotnet add reference path/to/AcmeshWrapper.csproj
+### Quick Start
+
+```csharp
+using AcmeshWrapper;
+
+// Create client
+var client = new AcmeClient();
+
+// List certificates
+var result = await client.ListAsync(new ListOptions { Raw = true });
+foreach (var cert in result.Certificates)
+{
+    Console.WriteLine($"{cert.Domain} - Expires: {cert.Le_Next_Renew_Time}");
+}
 ```
 
 ### Usage Examples
