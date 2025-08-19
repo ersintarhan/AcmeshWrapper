@@ -4,6 +4,7 @@ using AcmeshWrapper.Results;
 using Cysharp.Diagnostics;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -21,12 +22,23 @@ namespace AcmeshWrapper
             _acmeShPath = acmeShPath;
         }
 
-        public async Task<ListResult> ListAsync(ListOptions options)
+        private async Task<string[]> ExecuteProcessAsync(List<string> arguments, CancellationToken cancellationToken = default)
+        {
+            var processStartInfo = new ProcessStartInfo(_acmeShPath);
+            foreach (var arg in arguments)
+            {
+                processStartInfo.ArgumentList.Add(arg);
+            }
+
+            return await ProcessX.StartAsync(processStartInfo).ToTask(cancellationToken);
+        }
+
+        public async Task<ListResult> ListAsync(ListOptions options, CancellationToken cancellationToken = default)
         {
             var args = BuildListArgs(options);
             try
             {
-                var result = await ProcessX.StartAsync(_acmeShPath, args, workingDirectory: null).ToTask();
+                var result = await ExecuteProcessAsync(args, cancellationToken);
                 return ParseListResult(string.Join("\n", result));
             }
             catch (ProcessErrorException ex)
@@ -39,14 +51,14 @@ namespace AcmeshWrapper
             }
         }
 
-        private string BuildListArgs(ListOptions options)
+        private List<string> BuildListArgs(ListOptions options)
         {
             var args = new List<string> { "--list" };
             if (options.Raw)
             {
                 args.Add("--raw");
             }
-            return string.Join(" ", args);
+            return args;
         }
 
         private ListResult ParseListResult(string output)
@@ -113,12 +125,12 @@ namespace AcmeshWrapper
             return result;
         }
 
-        public async Task<IssueResult> IssueAsync(IssueOptions options)
+        public async Task<IssueResult> IssueAsync(IssueOptions options, CancellationToken cancellationToken = default)
         {
             var args = BuildIssueArgs(options);
             try
             {
-                var result = await ProcessX.StartAsync(_acmeShPath, args, workingDirectory: null).ToTask();
+                var result = await ExecuteProcessAsync(args, cancellationToken);
                 return ParseIssueResult(string.Join("\n", result));
             }
             catch (ProcessErrorException ex)
@@ -131,7 +143,7 @@ namespace AcmeshWrapper
             }
         }
 
-        private string BuildIssueArgs(IssueOptions options)
+        private List<string> BuildIssueArgs(IssueOptions options)
         {
             var args = new List<string> { "--issue" };
 
@@ -167,12 +179,12 @@ namespace AcmeshWrapper
                 args.Add(options.Server);
             }
 
-            return string.Join(" ", args);
+            return args;
         }
 
         private IssueResult ParseIssueResult(string output)
         {
-            var result = new IssueResult { IsSuccess = true, RawOutput = output };
+            var result = new IssueResult { IsSuccess = false, RawOutput = output };
 
             var certFileMatch = Regex.Match(output, @"Your cert is in:\s*(.+)");
             if (certFileMatch.Success)
@@ -198,6 +210,15 @@ namespace AcmeshWrapper
                 result.FullChainFile = fullChainFileMatch.Groups[1].Value.Trim();
             }
 
+            // Success is only true if all file paths are found
+            if (!string.IsNullOrEmpty(result.CertificateFile) &&
+                !string.IsNullOrEmpty(result.KeyFile) &&
+                !string.IsNullOrEmpty(result.CaFile) &&
+                !string.IsNullOrEmpty(result.FullChainFile))
+            {
+                result.IsSuccess = true;
+            }
+
             return result;
         }
 
@@ -213,7 +234,7 @@ namespace AcmeshWrapper
             var args = BuildRenewArgs(options);
             try
             {
-                var result = await ProcessX.StartAsync(_acmeShPath, args, workingDirectory: null).ToTask(cancellationToken);
+                var result = await ExecuteProcessAsync(args, cancellationToken);
                 return ParseRenewResult(string.Join("\n", result));
             }
             catch (ProcessErrorException ex)
@@ -226,7 +247,7 @@ namespace AcmeshWrapper
             }
         }
 
-        private string BuildRenewArgs(RenewOptions options)
+        private List<string> BuildRenewArgs(RenewOptions options)
         {
             var args = new List<string> { "--renew" };
 
@@ -253,17 +274,24 @@ namespace AcmeshWrapper
                 args.Add(options.Server);
             }
 
-            return string.Join(" ", args);
+            return args;
         }
 
         private RenewResult ParseRenewResult(string output)
         {
-            var result = new RenewResult 
-            { 
-                IsSuccess = true, 
+            var result = new RenewResult
+            {
+                IsSuccess = false,
                 RawOutput = output,
-                RenewedAt = DateTime.UtcNow
+                RenewedAt = null
             };
+
+            // A renewal that is skipped is also a success
+            if (output.Contains("Skip, Next renewal time is"))
+            {
+                result.IsSuccess = true;
+                return result;
+            }
 
             // Parse certificate file path
             var certFileMatch = Regex.Match(output, @"Your cert is in:\s*(.+?\.cer)");
@@ -294,9 +322,10 @@ namespace AcmeshWrapper
             }
 
             // Check if renewal was successful by looking for success indicators
-            if (output.Contains("Cert success") || output.Contains("Renew: "))
+            if (output.Contains("Cert success") && !string.IsNullOrEmpty(result.CertificatePath))
             {
                 result.IsSuccess = true;
+                result.RenewedAt = DateTime.UtcNow;
             }
             else if (output.Contains("error") || output.Contains("failed"))
             {
@@ -317,7 +346,7 @@ namespace AcmeshWrapper
             var args = BuildInstallCertArgs(options);
             try
             {
-                var result = await ProcessX.StartAsync(_acmeShPath, args, workingDirectory: null).ToTask(cancellationToken);
+                var result = await ExecuteProcessAsync(args, cancellationToken);
                 return ParseInstallCertResult(string.Join("\n", result));
             }
             catch (ProcessErrorException ex)
@@ -330,7 +359,7 @@ namespace AcmeshWrapper
             }
         }
 
-        private string BuildInstallCertArgs(InstallCertOptions options)
+        private List<string> BuildInstallCertArgs(InstallCertOptions options)
         {
             var args = new List<string> { "--install-cert" };
 
@@ -379,16 +408,16 @@ namespace AcmeshWrapper
                 args.Add(options.ReloadCmd);
             }
 
-            return string.Join(" ", args);
+            return args;
         }
 
         private InstallCertResult ParseInstallCertResult(string output)
         {
             var result = new InstallCertResult
             {
-                IsSuccess = true,
+                IsSuccess = false,
                 RawOutput = output,
-                InstalledAt = DateTime.UtcNow
+                InstalledAt = null
             };
 
             // Parse installed certificate file path
@@ -444,11 +473,12 @@ namespace AcmeshWrapper
             }
 
             // Check if installation was successful
-            if (output.Contains("[Info] Reload success") || 
-                (result.InstalledCertFile != null || result.InstalledKeyFile != null || 
-                 result.InstalledCaFile != null || result.InstalledFullChainFile != null))
+            if (output.Contains("Certificate installation completed") ||
+                output.Contains("[Info] Reload success") ||
+                !string.IsNullOrEmpty(result.InstalledCertFile))
             {
                 result.IsSuccess = true;
+                result.InstalledAt = DateTime.UtcNow;
             }
             else if (output.Contains("error") || output.Contains("failed"))
             {
@@ -469,7 +499,7 @@ namespace AcmeshWrapper
             var args = BuildRevokeArgs(options);
             try
             {
-                var result = await ProcessX.StartAsync(_acmeShPath, args, workingDirectory: null).ToTask(cancellationToken);
+                var result = await ExecuteProcessAsync(args, cancellationToken);
                 return ParseRevokeResult(string.Join("\n", result), options);
             }
             catch (ProcessErrorException ex)
@@ -485,7 +515,7 @@ namespace AcmeshWrapper
             }
         }
 
-        private string BuildRevokeArgs(RevokeOptions options)
+        private List<string> BuildRevokeArgs(RevokeOptions options)
         {
             var args = new List<string> { "--revoke" };
 
@@ -506,25 +536,26 @@ namespace AcmeshWrapper
                 args.Add(((int)options.Reason.Value).ToString());
             }
 
-            return string.Join(" ", args);
+            return args;
         }
 
         private RevokeResult ParseRevokeResult(string output, RevokeOptions options)
         {
             var result = new RevokeResult
             {
-                IsSuccess = true,
+                IsSuccess = false,
                 RawOutput = output,
                 Domain = options.Domain,
                 Reason = options.Reason,
                 WasEcc = options.Ecc,
-                RevokedAt = DateTime.UtcNow
+                RevokedAt = null
             };
 
             // Check if revocation was successful by looking for success indicators
             if (output.Contains("Revoke success") || output.Contains("Cert revoked"))
             {
                 result.IsSuccess = true;
+                result.RevokedAt = DateTime.UtcNow;
             }
             else if (output.Contains("error") || output.Contains("failed"))
             {
@@ -553,7 +584,7 @@ namespace AcmeshWrapper
             var args = BuildRemoveArgs(options);
             try
             {
-                var result = await ProcessX.StartAsync(_acmeShPath, args, workingDirectory: null).ToTask(cancellationToken);
+                var result = await ExecuteProcessAsync(args, cancellationToken);
                 return ParseRemoveResult(string.Join("\n", result), options);
             }
             catch (ProcessErrorException ex)
@@ -568,7 +599,7 @@ namespace AcmeshWrapper
             }
         }
 
-        private string BuildRemoveArgs(RemoveOptions options)
+        private List<string> BuildRemoveArgs(RemoveOptions options)
         {
             var args = new List<string> { "--remove" };
 
@@ -582,14 +613,14 @@ namespace AcmeshWrapper
                 args.Add("--ecc");
             }
 
-            return string.Join(" ", args);
+            return args;
         }
 
         private RemoveResult ParseRemoveResult(string output, RemoveOptions options)
         {
             var result = new RemoveResult
             {
-                IsSuccess = false, // Default to false until we confirm success
+                IsSuccess = false,
                 RawOutput = output,
                 Domain = options.Domain,
                 WasEcc = options.Ecc,
@@ -597,7 +628,7 @@ namespace AcmeshWrapper
             };
 
             // Check for the actual success pattern from acme.sh
-            if (output.Contains($"{options.Domain} has been removed"))
+            if (output.Contains($"'{options.Domain}' has been removed.") || output.Contains($"{options.Domain} has been removed"))
             {
                 result.IsSuccess = true;
                 result.RemovedAt = DateTime.UtcNow;
@@ -636,7 +667,7 @@ namespace AcmeshWrapper
             var args = BuildRenewAllArgs(options);
             try
             {
-                var result = await ProcessX.StartAsync(_acmeShPath, args, workingDirectory: null).ToTask(cancellationToken);
+                var result = await ExecuteProcessAsync(args, cancellationToken);
                 return ParseRenewAllResult(string.Join("\n", result));
             }
             catch (ProcessErrorException ex)
@@ -660,7 +691,7 @@ namespace AcmeshWrapper
             var args = BuildInfoArgs(options);
             try
             {
-                var result = await ProcessX.StartAsync(_acmeShPath, args, workingDirectory: null).ToTask(cancellationToken);
+                var result = await ExecuteProcessAsync(args, cancellationToken);
                 return ParseInfoResult(string.Join("\n", result));
             }
             catch (ProcessErrorException ex)
@@ -673,7 +704,7 @@ namespace AcmeshWrapper
             }
         }
 
-        private string BuildRenewAllArgs(RenewAllOptions options)
+        private List<string> BuildRenewAllArgs(RenewAllOptions options)
         {
             var args = new List<string> { "--renew-all" };
 
@@ -690,7 +721,7 @@ namespace AcmeshWrapper
                 args.Add(options.Server);
             }
 
-            return string.Join(" ", args);
+            return args;
         }
 
         private RenewAllResult ParseRenewAllResult(string output)
@@ -763,7 +794,7 @@ namespace AcmeshWrapper
             return result;
         }
 
-        private string BuildInfoArgs(InfoOptions options)
+        private List<string> BuildInfoArgs(InfoOptions options)
         {
             var args = new List<string> { "--info" };
 
@@ -777,7 +808,7 @@ namespace AcmeshWrapper
                 args.Add("--ecc");
             }
 
-            return string.Join(" ", args);
+            return args;
         }
 
         private InfoResult ParseInfoResult(string output)
