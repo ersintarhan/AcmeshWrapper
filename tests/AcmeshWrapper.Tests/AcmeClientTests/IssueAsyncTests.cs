@@ -376,6 +376,37 @@ namespace AcmeshWrapper.Tests.AcmeClientTests
             LogObject(result, "Parse Test Result");
         }
 
+        /// <summary>
+        /// Tests that issuance fails if the command produces empty output, even with exit code 0
+        /// </summary>
+        [TestMethod]
+        public async Task IssueAsync_EmptyOutput_ReturnsFailure()
+        {
+            // Arrange
+            var domain = "empty.example.com";
+
+            // Create a mock script that produces no output but exits successfully
+            CreateMockAcmeScript(new string[0], new[] { "--issue", "-d", domain, "--keylength", "4096" });
+            var client = CreateAcmeClient(GetTestFilePath("mock-acme.sh"));
+
+            var options = new IssueOptions
+            {
+                Domains = new List<string> { domain },
+                KeyLength = "4096"
+            };
+
+            // Act
+            var result = await client.IssueAsync(options);
+
+            // Assert
+            Assert.IsFalse(result.IsSuccess, "Result should be unsuccessful with empty output.");
+            Assert.IsNull(result.CertificateFile);
+            Assert.IsNull(result.KeyFile);
+
+            LogMessage("Issuance correctly failed for empty output.");
+            LogObject(result, "Empty Output Result");
+        }
+
         #region Helper Methods
 
         /// <summary>

@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.1;net9.0</TargetFrameworks>
+    <TargetFrameworks>netstandard2.1;net8.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     
@@ -22,7 +22,7 @@
   </PropertyGroup>
 
   <!-- Conditional compilation for implicit usings -->
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net9.0'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 

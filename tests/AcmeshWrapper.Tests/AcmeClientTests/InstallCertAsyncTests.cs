@@ -544,5 +544,100 @@ namespace AcmeshWrapper.Tests.AcmeClientTests
                 System.Diagnostics.Process.Start("chmod", $"+x {scriptPath}").WaitForExit();
             }
         }
+
+        /// <summary>
+        /// Tests that a reload command with spaces is handled as a single argument
+        /// </summary>
+        [TestMethod]
+        public async Task InstallCertAsync_ReloadCmdWithSpaces_IsHandledCorrectly()
+        {
+            // Arrange
+            var domain = "spaces-in-cmd.com";
+            var reloadCmdWithSpaces = "service nginx reload";
+            var injectionFile = GetTestFilePath("injection_test");
+
+            // This mock will fail if the reload command is split into multiple arguments
+            CreateReloaderMockAcmeScript(new[] { "--install-cert", "-d", domain, "--reloadcmd", reloadCmdWithSpaces }, injectionFile);
+            var client = CreateAcmeClient(GetTestFilePath("mock-acme.sh"));
+
+            var options = new InstallCertOptions(domain)
+            {
+                ReloadCmd = reloadCmdWithSpaces
+            };
+
+            // Act
+            var result = await client.InstallCertAsync(options);
+
+            // Assert
+            Assert.IsTrue(result.IsSuccess, "The command should succeed if arguments are passed correctly.");
+            Assert.IsTrue(result.ReloadCommandExecuted, "Reload command should have been executed.");
+            Assert.IsFalse(System.IO.File.Exists(injectionFile), "The injection file should NOT have been created.");
+        }
+
+        /// <summary>
+        /// Tests for command injection vulnerability in the reload command
+        /// </summary>
+        [TestMethod]
+        public async Task InstallCertAsync_CommandInjectionInReloadCmd_FailsToExecute()
+        {
+            // Arrange
+            var domain = "injection.com";
+            var injectionFile = GetTestFilePath("injection_test_file");
+            var maliciousCommand = $"; touch {injectionFile}"; // Attempt to inject a command
+
+            // Cleanup in case the test fails and the file is created
+            if (System.IO.File.Exists(injectionFile))
+                System.IO.File.Delete(injectionFile);
+
+            var options = new InstallCertOptions(domain)
+            {
+                ReloadCmd = maliciousCommand
+            };
+
+            // This mock script will naively execute the reload command, which would be vulnerable
+            // if the calling code is not secure.
+            CreateReloaderMockAcmeScript(new[] { "--install-cert", "-d", domain, "--reloadcmd", maliciousCommand }, injectionFile);
+            var client = CreateAcmeClient(GetTestFilePath("mock-acme.sh"));
+
+            // Act
+            await client.InstallCertAsync(options);
+
+            // Assert
+            Assert.IsFalse(System.IO.File.Exists(injectionFile), "Command injection should fail; the malicious command should not be executed.");
+        }
+
+        /// <summary>
+        /// Creates a mock acme.sh script that mimics the behavior of the reload command for security testing.
+        /// It checks if it receives the correct number of arguments and then executes the final argument.
+        /// </summary>
+        private void CreateReloaderMockAcmeScript(string[] expectedArgs, string injectionFilePath)
+        {
+            var scriptContent = "#!/bin/bash\n";
+            scriptContent += "set -e\n"; // Exit on error
+
+            // Check if the number of arguments is what we expect for a secure call
+            scriptContent += $"if [ \"$#\" -ne {expectedArgs.Length} ]; then\n";
+            scriptContent += "  echo \"Error: Incorrect number of arguments. Expected {expectedArgs.Length}, got $#.\" >&2\n";
+            scriptContent += "  # This is the injection vector. If the command is not passed as a single argument,";
+            scriptContent += "  # the shell will execute it here.";
+            scriptContent += "  $@\n";
+            scriptContent += "  exit 1\n";
+            scriptContent += "fi\n\n";
+
+            // If the argument count is correct, it means the command was passed as a single argument.
+            // We don't need to actually execute it, just confirm it was received correctly.
+            scriptContent += "echo \"[Info] Run reload cmd: ${@: -1}\"\n";
+            scriptContent += "echo \"[Info] Reload success\"\n";
+
+            scriptContent += "exit 0\n";
+
+            var scriptPath = CreateTestFile("mock-acme.sh", scriptContent);
+
+            if (Environment.OSVersion.Platform == PlatformID.Unix ||
+                Environment.OSVersion.Platform == PlatformID.MacOSX)
+            {
+                System.Diagnostics.Process.Start("chmod", $"+x {scriptPath}").WaitForExit();
+            }
+        }
     }
 }
